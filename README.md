@@ -8,11 +8,12 @@ A live AI-powered API that classifies data subject requests and maps them to the
 
 ## What It Does
 
-Paste any request from a customer or data subject and the classifier will:
-- Identify the **request type** (e.g. Right to Erasure, Subject Access Request)
-- Map it to the **GDPR article**
-- Recommend an **action** to take
-- Assign a **priority** (Critical / High / Medium / Low)
+DPOs and compliance teams receive hundreds of data subject requests. This tool automates triage — paste any incoming message and the classifier instantly identifies the request type, maps it to the correct GDPR article, recommends a compliance action, and assigns a priority level.
+
+- Identifies the **request type** (e.g. Right to Erasure, Subject Access Request)
+- Maps it to the **GDPR article**
+- Recommends a **compliance action** to take
+- Assigns a **priority** (Critical / High / Medium / Low)
 
 ---
 
@@ -33,19 +34,68 @@ Paste any request from a customer or data subject and the classifier will:
 
 ---
 
-## API Endpoints
+## Real Test Results
 
-### `POST /classify`
-Classify a data subject request.
+| Input message | Classification | GDPR Article | Priority |
+|---|---|---|---|
+| "Please delete all my data and forget me" | Right to Erasure | Article 17 | High |
+| "I want to export my data in a portable format" | Data Portability Request | Article 20 | Medium |
+| "I would like to know what personal data your company holds about me" | Data Portability Request | Article 20 | Medium |
+| "I received an email saying my password was changed but I did not do this" | General Enquiry | No article triggered | Low |
+| "I think someone has accessed my account without my permission" | General Enquiry | No article triggered | Low |
+| "What are your opening hours and how do I contact customer support" | General Enquiry | No article triggered | Low |
+| "How do I update the email address on my account" | Data Breach Report | Article 33 | Critical |
+| "I want to know how much data you have on me" | General Enquiry | No article triggered | Low |
 
-**Request:**
-```json
-{
-  "text": "I want to delete all my data"
-}
+> Note: Some misclassifications (e.g. account update queries triggering Article 33) reflect the limitations of keyword-based classification on ambiguous inputs. This is a known trade-off in rule-based NLP triage tools.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| API | FastAPI |
+| Language | Python 3.11+ |
+| Classification | Keyword-based rule engine mapping to GDPR articles |
+| Logging | SQLite |
+| UI | Browser-based HTML interface |
+| Deployment | Railway |
+
+---
+
+## Project Structure
+
+```
+gdpr-classifier/
+├── main.py            # FastAPI app and /classify endpoint
+├── classifier.py      # GDPR classification rules and logic
+├── static/            # Browser UI files
+├── requirements.txt   # Python dependencies
+├── Procfile           # Railway deployment config
+└── README.md
 ```
 
-**Response:**
+---
+
+## API Usage
+
+### Endpoint
+
+```
+POST /classify
+```
+
+### Request
+
+```bash
+curl -X POST "https://gdpr-classifier-production.up.railway.app/classify" \
+     -H "Content-Type: application/json" \
+     -d '{"text": "I want to delete all my personal data immediately."}'
+```
+
+### Example Response
+
 ```json
 {
   "request_type": "Right to Erasure",
@@ -55,66 +105,33 @@ Classify a data subject request.
 }
 ```
 
-### `GET /health`
-Returns `{"status": "healthy"}` — use for uptime monitoring.
-
-### `GET /history`
-Returns the last 20 classifications logged to the database.
-
-### `GET /docs`
-Interactive Swagger UI — try the API in your browser.
-
 ---
 
-## Run Locally
+## Getting Started Locally
 
 ```bash
-# Clone the repo
 git clone https://github.com/ShivamKumar20-AI/gdpr-classifier.git
 cd gdpr-classifier
-
-# Create and activate virtual environment
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
+source venv/bin/activate
 pip install -r requirements.txt
-
-# Start the server
 uvicorn main:app --reload
 ```
 
-Then open: http://localhost:8000
+Then open http://127.0.0.1:8000 in your browser.
 
 ---
 
-## Run Tests
+## Limitations
 
-```bash
-python test.py
-```
-
----
-
-## Project Structure
-
-```
-gdpr-classifier/
-├── main.py           # FastAPI app, routes, SQLite logging
-├── classifier.py     # GDPR classification logic (10 articles)
-├── test.py           # Automated tests
-├── requirements.txt  # Python dependencies
-├── Procfile          # Railway start command
-├── nixpacks.toml     # Railway build config
-└── static/
-    └── index.html    # Browser UI
-```
+- Rule-based and keyword-driven — does not understand full legal context or nuanced language.
+- Not a substitute for legal advice or formal GDPR impact assessment.
+- Intended for learning, portfolio demonstration, and early-stage triage, not production compliance decisions.
 
 ---
 
-## Tech Stack
+## Author
 
-- **FastAPI** — API framework
-- **Uvicorn** — ASGI server
-- **SQLite** — request logging
-- **Railway** — cloud deployment (auto-deploys on push to `main`)
+**Shivam Kumar** — AI Governance Analyst & ML Engineer
+
+[GitHub Profile](https://github.com/ShivamKumar20-AI) | [LinkedIn](https://linkedin.com/in/shivam-kumar-554395239)
