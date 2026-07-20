@@ -5,6 +5,7 @@ import datetime
 from pathlib import Path
 from classifier import classify
 
+
 st.set_page_config(
     page_title="GDPR Request Classifier",
     page_icon="🔐",
@@ -40,10 +41,10 @@ def log_to_db(input_text, result):
     """, (
         datetime.datetime.utcnow().isoformat(),
         input_text,
-        result["request_type"],
-        result["gdpr_article"],
-        result["action"],
-        result["priority"]
+        result.get("request_type", "Unknown"),
+        result.get("gdpr_article", "Unknown"),
+        result.get("action", "No action available"),
+        result.get("priority", "Medium")
     ))
     conn.commit()
     conn.close()
@@ -117,17 +118,40 @@ with tab1:
         elif len(cleaned) > 5000:
             st.error("Request text exceeds the 5000 character limit.")
         else:
-            result = classify(cleaned)
-            log_to_db(cleaned, result)
+            try:
+                result = classify(cleaned)
+                log_to_db(cleaned, result)
 
-            st.success("Classification complete.")
+                st.success("Classification complete.")
 
-            c1, c2 = st.columns(2)
-            c1.metric("Request Type", result["request_type"])
-            c2.metric("Priority", result["priority"])
+                c1, c2 = st.columns(2)
+                c1.metric("Request Type", result.get("request_type", "Unknown"))
+                c2.metric("Priority", result.get("priority", "Unknown"))
 
-            st.markdown("### GDPR Mapping")
-            st.write(f"**Article:** {result['gdpr_article']}")
-            st.write(f"**Recommended action:** {result['action']}")
+                st.markdown("### GDPR Mapping")
+                st.write(f"**Article:** {result.get('gdpr_article', 'Unknown')}")
+                st.write(f"**Recommended action:** {result.get('action', 'No action available')}")
 
-            with st.expander("Structured 
+                with st.expander("Structured output"):
+                    st.json(result)
+
+            except Exception as e:
+                st.error(f"An error occurred during classification: {e}")
+
+with tab2:
+    st.subheader("Recent classifications")
+
+    history_df = get_history()
+
+    if history_df.empty:
+        st.info("No classifications logged yet.")
+    else:
+        st.dataframe(history_df, use_container_width=True)
+
+        csv = history_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="Download history as CSV",
+            data=csv,
+            file_name="gdpr_classification_history.csv",
+            mime="text/csv"
+        )
