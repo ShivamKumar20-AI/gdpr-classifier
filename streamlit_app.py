@@ -1,4 +1,4 @@
-import streamlit_app as st
+import streamlit as st
 import pandas as pd
 import sqlite3
 import datetime
@@ -11,7 +11,7 @@ st.set_page_config(
     layout="wide"
 )
 
-DB_PATH = "requests.db"
+DB_PATH = Path("requests.db")
 
 
 def init_db():
@@ -50,10 +50,14 @@ def log_to_db(input_text, result):
 
 
 def get_history(limit=20):
-    if not Path(DB_PATH).exists():
+    if not DB_PATH.exists():
         return pd.DataFrame(columns=[
-            "timestamp", "input_text", "request_type",
-            "gdpr_article", "action", "priority"
+            "timestamp",
+            "input_text",
+            "request_type",
+            "gdpr_article",
+            "action",
+            "priority"
         ])
 
     conn = sqlite3.connect(DB_PATH)
@@ -126,25 +130,4 @@ with tab1:
             st.write(f"**Article:** {result['gdpr_article']}")
             st.write(f"**Recommended action:** {result['action']}")
 
-            with st.expander("Structured output"):
-                st.json(result)
-
-with tab2:
-    st.markdown("### Last 20 classifications")
-    history_df = get_history(20)
-
-    if history_df.empty:
-        st.info("No classifications logged yet.")
-    else:
-        st.dataframe(history_df, use_container_width=True)
-
-        csv = history_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "Download history as CSV",
-            data=csv,
-            file_name="gdpr_classifier_history.csv",
-            mime="text/csv"
-        )
-
-st.markdown("---")
-st.caption("Note: SQLite storage on Streamlit Cloud is temporary and may reset after app restarts.")
+            with st.expander("Structured 
