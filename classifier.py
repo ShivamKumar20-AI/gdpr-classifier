@@ -16,9 +16,10 @@ def classify(text: str) -> Dict:
         }
 
     # Article 17 — Right to Erasure
-  if any(k in t for k in ["delete my data", "delete all my data", "right to erasure", "remove my information",
-                          "forget me", "erase my data", "right to be forgotten",
-                          "wipe my data", "remove all my details"]):
+    if any(k in t for k in ["delete my data", "delete all my data", "i want to delete",
+                              "right to erasure", "remove my information",
+                              "forget me", "erase my data", "right to be forgotten",
+                              "wipe my data", "remove all my details"]):
         return {
             "request_type": "Right to Erasure",
             "gdpr_article": "Article 17 — Right to be Forgotten",
@@ -51,7 +52,10 @@ def classify(text: str) -> Dict:
     # Article 16 — Right to Rectification
     if any(k in t for k in ["update my data", "correct my information", "wrong details",
                               "inaccurate data", "change my address", "update my name",
-                              "fix my details", "incorrect information"]):
+                              "fix my details", "incorrect information", "is incorrect",
+                              "my address is", "my name is wrong", "wrong address",
+                              "wrong name", "update my address", "please correct",
+                              "needs to be updated", "out of date"]):
         return {
             "request_type": "Right to Rectification",
             "gdpr_article": "Article 16 — Right to Rectification",
