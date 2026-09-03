@@ -1,6 +1,18 @@
+# Python cache files
 __pycache__/
 *.pyc
-.DS_Store
-*.db
+*.pyo
+
+# Virtual environments
 venv/
-.env.DS_Store
+.venv/
+
+# Environment variables / secrets
+.env
+
+# Local databases and audit logs
+*.db
+logs/
+
+# macOS system files
+.DS_Store

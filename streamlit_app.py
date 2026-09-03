@@ -4,6 +4,26 @@ import sqlite3
 import datetime
 from pathlib import Path
 from classifier import classify
+from security import hash_input, mask_sensitive_text
+
+import time
+
+MAX_REQUESTS_PER_MINUTE = 5
+
+if "request_timestamps" not in st.session_state:
+    st.session_state.request_timestamps = []
+
+
+def check_rate_limit() -> bool:
+    now = time.time()
+    # Keep only timestamps from the last 60 seconds
+    st.session_state.request_timestamps = [
+        ts for ts in st.session_state.request_timestamps if now - ts < 60
+    ]
+    if len(st.session_state.request_timestamps) >= MAX_REQUESTS_PER_MINUTE:
+        return False
+    st.session_state.request_timestamps.append(now)
+    return True
 
 
 st.set_page_config(
@@ -11,6 +31,7 @@ st.set_page_config(
     page_icon="🔐",
     layout="wide"
 )
+
 
 DB_PATH = Path("requests.db")
 
@@ -21,7 +42,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS classifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT,
-            input_text TEXT,
+            input_hash TEXT,
+            input_preview TEXT,
             request_type TEXT,
             gdpr_article TEXT,
             action TEXT,
@@ -33,14 +55,18 @@ def init_db():
 
 
 def log_to_db(input_text, result):
+    input_hash = hash_input(input_text)
+    input_preview = mask_sensitive_text(input_text)
+
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
         INSERT INTO classifications
-        (timestamp, input_text, request_type, gdpr_article, action, priority)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (timestamp, input_hash, input_preview, request_type, gdpr_article, action, priority)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
         datetime.datetime.utcnow().isoformat(),
-        input_text,
+        input_hash,
+        input_preview,
         result.get("request_type", "Unknown"),
         result.get("gdpr_article", "Unknown"),
         result.get("action", "No action available"),
@@ -54,7 +80,8 @@ def get_history(limit=20):
     if not DB_PATH.exists():
         return pd.DataFrame(columns=[
             "timestamp",
-            "input_text",
+            "input_preview",
+            "input_hash",
             "request_type",
             "gdpr_article",
             "action",
@@ -63,7 +90,7 @@ def get_history(limit=20):
 
     conn = sqlite3.connect(DB_PATH)
     query = """
-        SELECT timestamp, input_text, request_type, gdpr_article, action, priority
+        SELECT timestamp, input_preview, input_hash, request_type, gdpr_article, action, priority
         FROM classifications
         ORDER BY id DESC
         LIMIT ?
@@ -75,10 +102,13 @@ def get_history(limit=20):
 
 init_db()
 
+
 st.title("🔐 GDPR Request Classifier")
 st.caption("Classify data subject requests and map them to the relevant GDPR article.")
 
+
 tab1, tab2 = st.tabs(["Classifier", "Recent history"])
+
 
 with tab1:
     example_prompts = [
@@ -113,6 +143,8 @@ with tab1:
 
         if not cleaned:
             st.error("Request text cannot be empty.")
+        elif not check_rate_limit():
+            st.error("Too many requests. Please wait a minute before trying again.")
         elif len(cleaned) < 5:
             st.error("Request text is too short to classify.")
         elif len(cleaned) > 5000:
@@ -137,6 +169,7 @@ with tab1:
 
             except Exception as e:
                 st.error(f"An error occurred during classification: {e}")
+
 
 with tab2:
     st.subheader("Recent classifications")
