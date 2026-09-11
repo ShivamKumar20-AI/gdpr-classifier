@@ -4,6 +4,7 @@ import sqlite3
 import datetime
 from pathlib import Path
 from classifier import classify
+from security import MIN_INPUT_LEN, MAX_INPUT_LEN
 from security import hash_input, mask_sensitive_text
 
 import time
@@ -145,20 +146,36 @@ with tab1:
             st.error("Request text cannot be empty.")
         elif not check_rate_limit():
             st.error("Too many requests. Please wait a minute before trying again.")
-        elif len(cleaned) < 5:
-            st.error("Request text is too short to classify.")
-        elif len(cleaned) > 5000:
-            st.error("Request text exceeds the 5000 character limit.")
+        elif len(cleaned) < MIN_INPUT_LEN:
+            st.error(f"Request text is too short to classify (minimum {MIN_INPUT_LEN} characters).")
+        elif len(cleaned) > MAX_INPUT_LEN:
+            st.error(f"Request text exceeds the {MAX_INPUT_LEN} character limit.")
         else:
             try:
                 result = classify(cleaned)
                 log_to_db(cleaned, result)
 
-                st.success("Classification complete.")
+                request_type = result.get("request_type", "Unknown")
 
+                if request_type == "Invalid Input":
+                    st.error(result.get("action", "The request text could not be classified."))
+                else:
+                    st.success("Classification complete.")
+
+                # st.metric truncates long values with an ellipsis, so the request
+                # type is rendered as text instead.
                 c1, c2 = st.columns(2)
-                c1.metric("Request Type", result.get("request_type", "Unknown"))
-                c2.metric("Priority", result.get("priority", "Unknown"))
+                c1.markdown("**Request Type**")
+                c1.markdown(f"### {request_type}")
+                c2.markdown("**Priority**")
+                c2.markdown(f"### {result.get('priority', 'Unknown')}")
+
+                if result.get("also_detected"):
+                    st.warning(
+                        f"This request also mentions: {result['also_detected']}. "
+                        "It has been classified under the most urgent category — "
+                        "handle the other points as well."
+                    )
 
                 st.markdown("### GDPR Mapping")
                 st.write(f"**Article:** {result.get('gdpr_article', 'Unknown')}")
