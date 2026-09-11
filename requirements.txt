@@ -2,3 +2,6 @@ streamlit>=1.50.0
 pandas>=2.3.3
 requests>=2.32.3
 python-dotenv
+# Touched 2026-09-11 to force a full Streamlit Cloud container rebuild:
+# the platform hot-reloaded streamlit_app.py but kept the previously imported
+# classifier module in sys.modules, so the fixed rules were not being used.
