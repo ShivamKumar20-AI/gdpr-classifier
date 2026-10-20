@@ -21,8 +21,7 @@ It is a lightweight portfolio project demonstrating practical knowledge of GDPR,
 - Suggests a recommended compliance action
 - Assigns a priority level, including critical handling for potential data breaches
 - Provides an interactive Streamlit interface
-- Displays recent classification history
-- Allows authorised demo users to download recent history as CSV
+- Keeps a privacy-minimised history that only an admin can view, behind a password (the public app has no history tab or download)
 - Includes lightweight application security and privacy controls
 
 ## GDPR Topics Covered
@@ -55,17 +54,21 @@ This project includes lightweight controls intended to demonstrate secure and pr
   - Full user request text is not written to the audit log  
 
 - **Data minimisation in SQLite history**  
-  - The local database does not retain the full submitted request  
-  - It stores a SHA-256 input hash and a masked input preview instead  
-  - This supports traceability while reducing unnecessary personal-data retention  
+  - The local database does not retain any of the submitted request text, not even a preview  
+  - It stores a salted HMAC-SHA-256 hash, the request length, the result and a timestamp  
+  - The history and its CSV download are visible only after entering an admin password (`ADMIN_PASSWORD`); if none is configured, the tab is not shown at all  
 
 - **Rate limiting**  
-  - The Streamlit UI limits each browser session to five classification requests per minute  
-  - This provides basic protection against rapid repeated requests and accidental misuse  
+  - Each browser session is limited to five classification requests per minute  
+  - A second limit of 30 requests per minute is shared by all visitors of the running app, so opening a new tab does not give a fresh allowance  
+  - Neither limit is per IP address or account, so this is basic protection against accidental misuse and casual flooding, not a determined attacker  
+
+- **Error handling**  
+  - Users see a generic message if classification fails; the detail goes to the server log only  
 
 - **Secrets handling pattern**  
   - `python-dotenv` supports local environment-variable loading  
-  - `.env.example` shows how future API keys can be configured  
+  - `.env.example` shows the optional settings: `ADMIN_PASSWORD` and `HASH_SALT`  
   - `.env`, local databases, logs, and Python cache files are excluded from Git through `.gitignore`  
 
 These controls are intentionally lightweight and are not a substitute for production-grade access control, encryption, monitoring, retention policies, or a formal Data Protection Impact Assessment.
@@ -79,7 +82,7 @@ These controls are intentionally lightweight and are not a substitute for produc
 | Data handling | Pandas |
 | Local storage | SQLite |
 | Classification | Rule-based keyword matching |
-| Security helpers | Custom `security.py`, hashing, masked previews |
+| Security helpers | Custom `security.py` (validation, salted hashing) and `ratelimit.py` |
 | Secrets support | `python-dotenv` |
 
 ## Project Structure
@@ -88,7 +91,9 @@ These controls are intentionally lightweight and are not a substitute for produc
 gdpr-classifier/
 ├── streamlit_app.py      # Streamlit interface, local history, rate limiting
 ├── classifier.py         # GDPR request classification logic and audit logging
-├── security.py           # Input validation, sanitisation, hashing, masking
+├── security.py           # Input validation, sanitisation, salted hashing
+├── ratelimit.py          # Shared (all-visitor) rate limiter
+├── tests/                # Classifier, hashing and rate limit tests
 ├── secrets_helper.py     # Environment-variable helper for future secrets
 ├── requirements.txt      # Python dependencies
 ├── .env.example          # Example environment-variable configuration
@@ -109,7 +114,14 @@ gdpr-classifier/
    - Recommended compliance action
    - Priority level
 6. The result is displayed in the app.
-7. A privacy-minimised record is stored locally using a hash and masked preview rather than the full request text.
+7. A privacy-minimised record is stored locally: a salted hash and the request length, never the request text.
+
+## Tests
+
+```bash
+pip install pytest
+pytest -q
+```
 
 ## Run Locally
 
@@ -163,8 +175,10 @@ The app is deployed on Streamlit Community Cloud:
 - The tool may not classify every request correctly and should not be used as the sole basis for compliance decisions.
 - It does not verify the identity of the requester before recommending action.
 - Streamlit Community Cloud storage is temporary and may reset after an app restart or redeployment.
-- The rate limit is browser-session based, not a production-grade IP- or account-based control.
-- The application does not yet include user authentication, role-based access control, encrypted persistent storage, or automated retention/deletion rules.
+- The rate limits are per browser session and per running app, not per IP address or account.
+- The admin history view uses a single shared password, not user accounts or role-based access control.
+- The application does not yet include encrypted persistent storage or automated retention/deletion rules.
+- Matching is by phrases and patterns, so unusual wording can still be misclassified. A person should confirm every result.
 
 ## Possible Improvements
 

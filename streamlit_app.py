@@ -2,20 +2,45 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import datetime
+import hmac
+import logging
 from pathlib import Path
 from classifier import classify
 from security import MIN_INPUT_LEN, MAX_INPUT_LEN
-from security import hash_input, mask_sensitive_text
+from security import hash_input
+from ratelimit import SlidingWindowLimiter
+from secrets_helper import get_secret
 
 import time
 
-MAX_REQUESTS_PER_MINUTE = 5
+logger = logging.getLogger(__name__)
+
+MAX_REQUESTS_PER_MINUTE = 5          # per browser session
+MAX_REQUESTS_PER_MINUTE_ALL = 30     # shared by every visitor of the running app
+
+
+@st.cache_resource
+def get_global_limiter() -> SlidingWindowLimiter:
+    return SlidingWindowLimiter(MAX_REQUESTS_PER_MINUTE_ALL)
+
+
+def get_admin_password() -> str | None:
+    """The history view is only offered when an admin password is configured."""
+    password = get_secret("ADMIN_PASSWORD")
+    if password:
+        return password
+    try:
+        return st.secrets.get("ADMIN_PASSWORD")
+    except Exception:
+        return None
 
 if "request_timestamps" not in st.session_state:
     st.session_state.request_timestamps = []
 
 
 def check_rate_limit() -> bool:
+    if not get_global_limiter().allow():
+        return False
     now = time.time()
     # Keep only timestamps from the last 60 seconds
     st.session_state.request_timestamps = [
@@ -57,7 +82,8 @@ def init_db():
 
 def log_to_db(input_text, result):
     input_hash = hash_input(input_text)
-    input_preview = mask_sensitive_text(input_text)
+    # No part of the request text is stored, only its length and a salted hash.
+    input_preview = f"[{len(input_text)} characters, text not stored]"
 
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
@@ -108,7 +134,12 @@ st.title("🔐 GDPR Request Classifier")
 st.caption("Classify data subject requests and map them to the relevant GDPR article.")
 
 
-tab1, tab2 = st.tabs(["Classifier", "Recent history"])
+admin_password = get_admin_password()
+if admin_password:
+    tab1, tab2 = st.tabs(["Classifier", "Admin: history"])
+else:
+    (tab1,) = st.tabs(["Classifier"])
+    tab2 = None
 
 
 with tab1:
@@ -184,24 +215,30 @@ with tab1:
                 with st.expander("Structured output"):
                     st.json(result)
 
-            except Exception as e:
-                st.error(f"An error occurred during classification: {e}")
+            except Exception:
+                logger.exception("Classification failed")
+                st.error("Something went wrong while classifying this request. Please try again.")
 
 
-with tab2:
-    st.subheader("Recent classifications")
+if tab2 is not None:
+    with tab2:
+        st.subheader("Recent classifications (admin only)")
+        entered = st.text_input("Admin password", type="password")
 
-    history_df = get_history()
+        if entered and hmac.compare_digest(entered.encode(), admin_password.encode()):
+            history_df = get_history()
 
-    if history_df.empty:
-        st.info("No classifications logged yet.")
-    else:
-        st.dataframe(history_df, use_container_width=True)
+            if history_df.empty:
+                st.info("No classifications logged yet.")
+            else:
+                st.dataframe(history_df, use_container_width=True)
 
-        csv = history_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="Download history as CSV",
-            data=csv,
-            file_name="gdpr_classification_history.csv",
-            mime="text/csv"
-        )
+                csv = history_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="Download history as CSV",
+                    data=csv,
+                    file_name="gdpr_classification_history.csv",
+                    mime="text/csv"
+                )
+        elif entered:
+            st.error("Incorrect password.")

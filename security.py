@@ -1,7 +1,10 @@
 # security.py
 import hashlib
+import hmac
 import re
-from typing import Tuple
+import secrets
+
+from secrets_helper import get_secret
 
 MAX_INPUT_LEN = 2000
 MIN_INPUT_LEN = 10
@@ -48,17 +51,14 @@ def sanitize_input(text: str) -> str:
     return text
 
 
+# Salt for hashing. Set HASH_SALT in the environment (or Streamlit secrets) for hashes that
+# stay comparable between restarts. Without it a random salt is made each time the app starts,
+# so short, guessable requests cannot be matched to their hash by an outsider.
+_SALT = (get_secret("HASH_SALT") or secrets.token_hex(16)).encode("utf-8")
+
+
 def hash_input(text: str) -> str:
     """
-    Create a non-reversible hash of the input for logging/auditing.
+    Create a salted, non-reversible hash of the input for logging/auditing.
     """
-    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
-
-
-def mask_sensitive_text(text: str, keep_chars: int = 10) -> str:
-    """
-    For display/logging: show only first/last few chars.
-    """
-    if len(text) <= keep_chars * 2:
-        return "*" * len(text)
-    return text[:keep_chars] + "..." + text[-keep_chars:]
+    return hmac.new(_SALT, (text or "").encode("utf-8"), hashlib.sha256).hexdigest()

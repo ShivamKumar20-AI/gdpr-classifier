@@ -1,4 +1,5 @@
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,23 +34,19 @@ class Rule:
     action: str
     priority: str
     triggers: tuple[str, ...]
+    # Regular expressions for wording that fixed phrases miss, such as "delete all the
+    # personal data you hold" (a fixed phrase only catches "delete all my personal data").
+    patterns: tuple[str, ...] = ()
 
     def matches(self, text: str) -> bool:
-        return any(trigger in text for trigger in self.triggers)
+        if any(trigger in text for trigger in self.triggers):
+            return True
+        return any(re.search(pattern, text) for pattern in self.patterns)
 
 
+# Order matters for ties: Erasure is listed before Access, so a request that asks to delete the data
+# a company holds is treated as erasure, not just access.
 RULES: tuple[Rule, ...] = (
-    Rule(
-        request_type="Subject Access Request (SAR)",
-        gdpr_article="Article 15 — Right of Access",
-        action="Respond within 30 days with a copy of all personal data held.",
-        priority="High",
-        triggers=(
-            "subject access request", "sar", "access to my data", "what data do you hold",
-            "copy of my data", "what information do you have on me",
-            "personal data you hold about me", "data you hold about me",
-        ),
-    ),
     Rule(
         request_type="Right to Erasure",
         gdpr_article="Article 17 — Right to be Forgotten",
@@ -60,6 +57,23 @@ RULES: tuple[Rule, ...] = (
             "remove my information", "forget me", "erase my data", "right to be forgotten",
             "wipe my data", "remove all my details", "delete all my personal data",
         ),
+        patterns=(
+            r"\b(delete|erase|wipe)\b.{0,40}\b(data|information|details|records|account)\b",
+            r"\bremove\b.{0,20}\bmy\b.{0,20}\b(data|information|details|records)\b",
+        ),
+    ),
+    Rule(
+        request_type="Subject Access Request (SAR)",
+        gdpr_article="Article 15 — Right of Access",
+        action="Respond within 30 days with a copy of all personal data held.",
+        priority="High",
+        triggers=(
+            "subject access request", "access to my data", "what data do you hold",
+            "copy of my data", "what information do you have on me",
+            "personal data you hold about me", "data you hold about me",
+        ),
+        # "sar" on its own, not inside words such as "necessary" or "disarray"
+        patterns=(r"\bsar\b",),
     ),
     Rule(
         request_type="Data Breach Report",
